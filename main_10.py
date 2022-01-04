@@ -1,5 +1,6 @@
 import csv
 import networkx as nx
+from networkx.generators.classic import complete_graph
 import numpy as np
 import matplotlib.pyplot as plt
 from networkx.relabel import convert_node_labels_to_integers
@@ -29,7 +30,7 @@ def generate_example_community_graph(num_nodes, num_communities, k_within, k_bet
 
 def get_best_partition(G, node_list):
     if len(node_list) == 1:
-        return None
+        return np.zeros(len(G.nodes))
 
     num_nodes = len(G.nodes)
     communities = np.random.randint(0, 2, size=num_nodes)
@@ -57,9 +58,9 @@ def get_best_partition(G, node_list):
     while num_tries < len(node_list):
         num_tries += 1
         worst_nodes = np.argsort([kappas[i]*num_edges/degrees[i] - aris[communities[i]] for i in node_list])
-        probabilities = 1/np.power(np.arange(1, worst_nodes.shape[0]+1), 1.8)
+        probabilities = 1/np.power(np.arange(1, worst_nodes.shape[0]+1), 2)
         node = node_list[np.random.choice(worst_nodes, 1, p=probabilities/np.sum(probabilities))[0]]
-        node = node_list[worst_nodes[0]]
+        # node = node_list[worst_nodes[0]]
         communities[node] = 1-communities[node]
         kappas[node] = degrees[node]-kappas[node]
         for edge in G.edges(node):
@@ -81,52 +82,53 @@ def get_best_partition(G, node_list):
     communities = best_communities
 
     if best_fitness <= 0:
-        return None
+        return np.zeros(len(G.nodes))
 
     community_0_node_list = [i for i in node_list if communities[i] == 0]
     community_1_node_list = [i for i in node_list if communities[i] == 1]
 
     if len(community_0_node_list) > 0 and len(community_1_node_list) > 0:
-        for node in node_list:
-            for edge in list(G.edges(node)):
-                if communities[edge[1]] != communities[node]:
-                    G.remove_edge(edge[0], edge[1])
 
-        communities += static_variables.NUM_COMMUNITIES
-        static_variables.NUM_COMMUNITIES += 2
+        for edge in list(G.edges):
+            if edge[0] in node_list and edge[1] in node_list and\
+                    communities[edge[0]] != communities[edge[1]]:
+                G.remove_edge(edge[0], edge[1])
 
         communities_0 = get_best_partition(G, community_0_node_list)
-        if communities_0 is not None:
-            for i in community_0_node_list:
-                communities[i] = static_variables.NUM_COMMUNITIES + communities_0[i]
-            static_variables.NUM_COMMUNITIES += 2
+        for i in community_0_node_list:
+            communities[i] += communities_0[i]
+        
+        num_comunities = max(communities_0)
         communities_1 = get_best_partition(G, community_1_node_list)
-        if communities_1 is not None:
-            for i in community_1_node_list:
-                communities[i] = 1 + static_variables.NUM_COMMUNITIES + communities_1[i]
-            static_variables.NUM_COMMUNITIES += 3
-    else:
-        communities += static_variables.NUM_COMMUNITIES
-        static_variables.NUM_COMMUNITIES += 2
+        for i in community_1_node_list:
+            communities[i] += communities_1[i] + num_comunities 
 
     return communities
 
 if __name__ == '__main__':
+    file_name = "D3-UNC"
+    adj_matrix = np.genfromtxt(f"./competition_data/{file_name}.csv", delimiter=',')
+    G_original = nx.from_numpy_array(adj_matrix)
     # G_original = nx.barbell_graph(20, 3)
-    G_original = generate_example_community_graph(400, 8, 40, 4)
+    # G_original = generate_example_community_graph(400, 8, 40, 4)
+    # G_original = complete_graph(30)
+    # G_original = nx.karate_club_graph()
     print(f"Number of nodes: {len(G_original.nodes)}")
     G = convert_node_labels_to_integers(G_original)
     np.random.seed(20)
 
     communities = get_best_partition(G, list(range(len(G.nodes))))
-    if communities is None:
-        communities = np.zeros(len(G.nodes))
-    unique_communities = np.unique(communities)
-    communities = [np.argwhere(unique_communities == c)[0][0] for c in communities]
-
-    colors = {0: "red", 1: "blue", 2: "green", 3: "orange", 4: "grey", 5: "deeppink", 6: "black", 7: "yellow"}
+    unique_communities = sorted(np.unique(communities), key=lambda x:(np.where(communities==x)[0][0]))
+    communities = [np.argwhere(unique_communities == c)[0][0]+1 for c in communities]
+    print(f"Number of communities: {max(communities)}")
+    colors = ["red", "blue", "green", "orange", "grey", "deeppink", "black", "yellow"]
     color_map = [colors[c%8] for c in communities]
     pos = nx.spring_layout(G_original, seed=42)
     np.random.seed(42)
-    nx.draw(G_original, node_color=color_map, pos=pos)
+    nx.draw(G_original, node_color=color_map, pos=pos, node_size=10, width=0.15)
     plt.show()
+
+    file = open(f"./competition_results/{file_name}.csv", mode='w')
+    for node, community in zip(range(len(communities)), communities):
+        file.write(f"{node}, {community}\n")
+    file.close()
