@@ -4,6 +4,7 @@ from networkx.generators.classic import complete_graph
 import numpy as np
 import matplotlib.pyplot as plt
 from networkx.relabel import convert_node_labels_to_integers
+import time
 
 class static_variables:
     NUM_COMMUNITIES = 2
@@ -107,6 +108,7 @@ def get_best_partition(G, node_list):
 
 if __name__ == '__main__':
     file_name = "D3-UNC"
+    start = time.time()
     adj_matrix = np.genfromtxt(f"./competition_data/{file_name}.csv", delimiter=',')
     G_original = nx.from_numpy_array(adj_matrix)
     # G_original = nx.barbell_graph(20, 3)
@@ -118,6 +120,7 @@ if __name__ == '__main__':
     np.random.seed(20)
 
     communities = get_best_partition(G, list(range(len(G.nodes))))
+    print(f"{time.time() - start} elapsed time")
     unique_communities = sorted(np.unique(communities), key=lambda x:(np.where(communities==x)[0][0]))
     communities = [np.argwhere(unique_communities == c)[0][0]+1 for c in communities]
     print(f"Number of communities: {max(communities)}")
